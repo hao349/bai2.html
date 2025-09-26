@@ -1,52 +1,164 @@
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
+using TourBookingApp.Models;
 
-namespace TourBookingApp.Models
+namespace TourBookingApp.ViewModels
 {
-    public class Tour
+    public class TourListViewModel
     {
-        public int Id { get; set; }
-
-        [Required, StringLength(255, MinimumLength = 5)]
-        public string Name { get; set; }
-
-        [Required, Range(0, double.MaxValue)]
-        public decimal Price { get; set; }
-
-        [Required, Range(1, 30)]
-        public int Duration { get; set; }
-
-        public string Description { get; set; }
-
-        public ICollection<Booking> Bookings { get; set; }
+        public IEnumerable<Tour> Tours { get; set; }
+        public int CurrentPage { get; set; }
+        public int TotalPages { get; set; }
+        public string SortOrder { get; set; }
+        public string SearchTerm { get; set; }
+        public int? MinDuration { get; set; }
     }
 }
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
+using System.Threading.Tasks;
+using TourBookingApp.Data;
+using TourBookingApp.ViewModels;
 
-namespace TourBookingApp.Models
+namespace TourBookingApp.Controllers
 {
-    public class Booking
+    public class ToursController : Controller
     {
-        public int Id { get; set; }
+        private readonly AppDbContext _context;
+        private const int PageSize = 10;
 
-        [Required]
-        public DateTime BookingDate { get; set; }
+        public ToursController(AppDbContext context)
+        {
+            _context = context;
+        }
 
-        [Required, StringLength(100, MinimumLength = 3)]
-        public string CustomerName { get; set; }
+        public async Task<IActionResult> Index(string sortOrder, string searchTerm, int? minDuration, int page = 1)
+        {
+            var query = _context.Tours.AsNoTracking();
 
-        [Required, EmailAddress]
-        public string CustomerEmail { get; set; }
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+                query = query.Where(t => t.Name.Contains(searchTerm));
 
-        [Required]
-        public int TourId { get; set; }
+            if (minDuration.HasValue && minDuration.Value > 0)
+                query = query.Where(t => t.Duration > minDuration.Value);
 
-        [ForeignKey("TourId")]
-        public Tour Tour { get; set; }
+            query = sortOrder switch
+            {
+                "name_desc" => query.OrderByDescending(t => t.Name),
+                "price" => query.OrderBy(t => t.Price),
+                "price_desc" => query.OrderByDescending(t => t.Price),
+                "duration" => query.OrderBy(t => t.Duration),
+                "duration_desc" => query.OrderByDescending(t => t.Duration),
+                _ => query.OrderBy(t => t.Name),
+            };
 
-        [Required, Range(1, int.MaxValue)]
-        public int NumberOfPeople { get; set; }
+            var totalItems = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling(totalItems / (double)PageSize);
+
+            var tours = await query.Skip((page - 1) * PageSize).Take(PageSize).ToListAsync();
+
+            var vm = new TourListViewModel
+            {
+                Tours = tours,
+                CurrentPage = page,
+                TotalPages = totalPages,
+                SortOrder = sortOrder,
+                SearchTerm = searchTerm,
+                MinDuration = minDuration
+            };
+
+            return View(vm);
+        }
+    }
+}
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Threading.Tasks;
+using TourBookingApp.Data;
+using TourBookingApp.Models;
+
+namespace TourBookingApp.Controllers
+{
+    public class BookingsController : Controller
+    {
+        private readonly AppDbContext _context;
+
+        public BookingsController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<IActionResult> Create()
+        {
+            ViewData["TourId"] = new SelectList(await _context.Tours.ToListAsync(), "Id", "Name");
+            return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create([Bind("BookingDate,CustomerName,CustomerEmail,TourId,NumberOfPeople")] Booking booking)
+        {
+            if (ModelState.IsValid)
+            {
+                _context.Add(booking);
+                await _context.SaveChangesAsync();
+                return RedirectToAction("Index", "Tours");
+            }
+            ViewData["TourId"] = new SelectList(await _context.Tours.ToListAsync(), "Id", "Name", booking.TourId);
+            return View(booking);
+        }
+
+        public async Task<IActionResult> Edit(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking == null) return NotFound();
+
+            ViewData["TourId"] = new SelectList(await _context.Tours.ToListAsync(), "Id", "Name", booking.TourId);
+            return View(booking);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, [Bind("Id,BookingDate,CustomerName,CustomerEmail,TourId,NumberOfPeople")] Booking booking)
+        {
+            if (id != booking.Id) return NotFound();
+
+            if (ModelState.IsValid)
+            {
+                _context.Update(booking);
+                await _context.SaveChangesAsync();
+                return RedirectToAction("Index", "Tours");
+            }
+            ViewData["TourId"] = new SelectList(await _context.Tours.ToListAsync(), "Id", "Name", booking.TourId);
+            return View(booking);
+        }
+
+        public async Task<IActionResult> Delete(int? id)
+        {
+            if (id == null) return NotFound();
+
+            var booking = await _context.Bookings.Include(b => b.Tour).FirstOrDefaultAsync(m => m.Id == id);
+            if (booking == null) return NotFound();
+
+            return View(booking);
+        }
+
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            var booking = await _context.Bookings.FindAsync(id);
+            if (booking != null)
+            {
+                _context.Bookings.Remove(booking);
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction("Index", "Tours");
+        }
     }
 }
