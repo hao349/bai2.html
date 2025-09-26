@@ -1,34 +1,52 @@
-﻿using CSharp_Exam.Services;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
-namespace CSharp_Exam
+namespace TourBookingApp.Models
 {
-    class Program
+    public class Tour
     {
-        static void Main()
-        {
-            CourseManager manager = new CourseManager();
-            while (true)
-            {
-                Console.WriteLine("\n=== COURSE ENROLLMENT MENU ===");
-                Console.WriteLine("1. Register New Course / Online Course");
-                Console.WriteLine("2. View All Courses");
-                Console.WriteLine("3. Update Course Fee");
-                Console.WriteLine("4. Delete Course");
-                Console.WriteLine("5. Calculate Total Fee by Course ID");
-                Console.WriteLine("6. Exit");
-                Console.Write("Enter your choice: ");
+        public int Id { get; set; }
 
-                switch (Console.ReadLine())
-                {
-                    case "1": manager.RegisterCourse(); break;
-                    case "2": manager.ViewAllCourses(); break;
-                    case "3": manager.UpdateCourseFee(); break;
-                    case "4": manager.DeleteCourse(); break;
-                    case "5": manager.CalculateTotalFeeById(); break;
-                    case "6": return;
-                    default: Console.WriteLine("Invalid choice. Try again."); break;
-                }
-            }
-        }
+        [Required, StringLength(255, MinimumLength = 5)]
+        public string Name { get; set; }
+
+        [Required, Range(0, double.MaxValue)]
+        public decimal Price { get; set; }
+
+        [Required, Range(1, 30)]
+        public int Duration { get; set; }
+
+        public string Description { get; set; }
+
+        public ICollection<Booking> Bookings { get; set; }
+    }
+}
+using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace TourBookingApp.Models
+{
+    public class Booking
+    {
+        public int Id { get; set; }
+
+        [Required]
+        public DateTime BookingDate { get; set; }
+
+        [Required, StringLength(100, MinimumLength = 3)]
+        public string CustomerName { get; set; }
+
+        [Required, EmailAddress]
+        public string CustomerEmail { get; set; }
+
+        [Required]
+        public int TourId { get; set; }
+
+        [ForeignKey("TourId")]
+        public Tour Tour { get; set; }
+
+        [Required, Range(1, int.MaxValue)]
+        public int NumberOfPeople { get; set; }
     }
 }
